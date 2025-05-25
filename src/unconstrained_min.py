@@ -126,3 +126,60 @@ class UnconstrainedMinimizer:
             Optimal step size
         """
         pass
+
+
+class ObjectiveFunction:
+    """
+    Base class template for objective functions with analytic derivatives.
+    
+    Each objective function should inherit from this class and implement
+    the exact analytic formulas for f, gradient, and Hessian.
+    """
+    
+    def func(self, x):
+        """
+        Evaluate the objective function at point x.
+        
+        Parameters:
+        -----------
+        x : array-like
+            Point at which to evaluate function
+            
+        Returns:
+        --------
+        value : float
+            Function value f(x)
+        """
+        raise NotImplementedError("Must implement analytic function formula")
+    
+    def grad(self, x):
+        """
+        Evaluate the gradient of the objective function at point x.
+        
+        Parameters:
+        -----------
+        x : array-like
+            Point at which to evaluate gradient
+            
+        Returns:
+        --------
+        gradient : array-like
+            Gradient vector ∇f(x)
+        """
+        raise NotImplementedError("Must implement analytic gradient formula")
+    
+    def hessian(self, x):
+        """
+        Evaluate the Hessian matrix of the objective function at point x.
+        
+        Parameters:
+        -----------
+        x : array-like
+            Point at which to evaluate Hessian
+            
+        Returns:
+        --------
+        hessian : array-like
+            Hessian matrix ∇²f(x)
+        """
+        raise NotImplementedError("Must implement analytic Hessian formula")

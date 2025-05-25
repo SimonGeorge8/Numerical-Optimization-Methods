@@ -15,56 +15,87 @@ from unconstrained_min import ObjectiveFunction
 
 class QuadraticFunction(ObjectiveFunction):
     """
-    Example: Quadratic function f(x) = (1/2) * x^T * Q * x + b^T * x + c
+    Example: Quadratic function f(x) = (1/2) * x^T * Q * x
     
     Analytic derivatives:
-    - ∇f(x) = Q * x + b
+    - ∇f(x) = Q * x
     - ∇²f(x) = Q
     """
     
-    def __init__(self, Q, b, c):
+    def __init__(self, Q):
         """
         Parameters:
         -----------
         Q : array-like, shape (n, n)
             Quadratic term matrix (should be positive definite for minimization)
-        b : array-like, shape (n,)
-            Linear term vector
-        c : float
-            Constant term
         """
+        self.Q = Q
+
         pass
     
     def func(self, x):
         """
-        Evaluate f(x) = (1/2) * x^T * Q * x + b^T * x + c
+        Evaluate f(x) = (1/2) * x^T * Q * x 
         """
-        pass
+        return float((0.5) * (x.T) @ self.Q @ x)
     
     def grad(self, x):
         """
-        Evaluate ∇f(x) = Q * x + b
+        Evaluate ∇f(x) = Q * x 
         """
-        pass
+        return self.Q @ x
     
-    def hessian(self, x):
+    def hessian(self):
         """
         Evaluate ∇²f(x) = Q
         """
-        pass
+        return self.Q
 
+class LinearFunction:
+    """
+    Implements a linear function f(x) = a^T x
+    where a is a constant nonzero vector.
+    """
 
+    def __init__(self, a=np.array([1.0, -2.0])):
+        """
+        Parameters:
+        -----------
+        a : np.array
+            Nonzero vector of shape (2,)
+        """
+        self.a = a
+
+    def func(self, x1, x2):
+        """
+        Evaluate f(x) = a^T x
+        """
+        x = np.array([x1, x2])
+        return float(np.dot(self.a, x))
+
+    def grad(self, x1, x2):
+        """
+        Gradient of a linear function is constant and equals vector a
+        """
+        return self.a.copy()
+
+    def hessian(self, x1, x2):
+        """
+        Hessian of a linear function is always zero matrix
+        """
+        return np.zeros((2, 2))
+    
 class RosenbrockFunction(ObjectiveFunction):
     """
     Example: Rosenbrock function f(x,y) = (a-x)² + b(y-x²)²
     Default: a=1, b=100 gives f(x,y) = (1-x)² + 100(y-x²)²
     
     Analytic derivatives (derive these on paper):
-    - ∂f/∂x = ?  # TODO: derive and implement
-    - ∂f/∂y = ?  # TODO: derive and implement
-    - ∂²f/∂x² = ?  # TODO: derive and implement
-    - ∂²f/∂x∂y = ?  # TODO: derive and implement
-    - ∂²f/∂y² = ?  # TODO: derive and implement
+    - ∂f/∂x = -4*b*(y-x^2) - 2(a-x)
+    - ∂f/∂y = 2*b*(y-x^2)
+    - ∂²f/∂x² = 2-4b(y-x^2)+8bx^2
+    - ∂²f/∂x∂y = - 4*b*x
+    - ∂²f/∂y² = 2*b
     """
     
     def __init__(self, a=1, b=100):
@@ -76,58 +107,88 @@ class RosenbrockFunction(ObjectiveFunction):
         b : float  
             Parameter for b(y-x²)² term
         """
-        pass
+        self.a = a
+        self.b = b
     
-    def func(self, x):
+    def func(self, x, y):
         """
         Evaluate f(x,y) = (a-x)² + b(y-x²)²
         """
-        pass
+        a = self.a
+        b = self.b
+        return float((a-x)**2 + b*(y-x**2)**2)
     
-    def grad(self, x):
+    def grad(self, x, y):
         """
         Evaluate gradient vector [∂f/∂x, ∂f/∂y]
         """
-        pass
-    
-    def hessian(self, x):
+        a = self.a
+        b = self.b
+        rep = y - x**2
+        df_dx = -4*b*x*rep - 2*(a - x)
+        df_dy = 2*b*rep
+        return np.array([df_dx, df_dy])
+
+    def hessian(self, x, y):
         """
         Evaluate Hessian matrix:
         [[∂²f/∂x², ∂²f/∂x∂y],
          [∂²f/∂x∂y, ∂²f/∂y²]]
         """
-        pass
+        b = self.b
+        rep = y - x**2
+        d2f_dx2 = 2 - 4*b*rep + 8*b*x**2
+        d2f_dxdy = -4*b*x
+        d2f_dy2 = 2*b
+        return np.array([[d2f_dx2, d2f_dxdy],
+                         [d2f_dxdy, d2f_dy2]])
 
-
-class CircleFunction(ObjectiveFunction):
+class SmoothedCornerTrianglesFunction:
     """
-    Example: Circle function f(x,y) = x² + y²
-    
-    Analytic derivatives:
-    - ∇f(x,y) = [2x, 2y]
-    - ∇²f(x,y) = [[2, 0], [0, 2]]
+    Implements the function:
+        f(x1, x2) = exp(x1 + 3x2 - 0.1) + exp(x1 - 3x2 - 0.1) + exp(-x1 - 0.1)
+    As seen in Boyd, p. 470, example 9.20.
     """
-    
-    def func(self, x):
-        """
-        Evaluate f(x,y) = x² + y²
-        """
-        pass
-    
-    def grad(self, x):
-        """
-        Evaluate ∇f(x,y) = [2x, 2y]
-        """
-        pass
-    
-    def hessian(self, x):
-        """
-        Evaluate ∇²f(x,y) = [[2, 0], [0, 2]]
-        """
-        pass
 
+    def func(self, x1, x2):
+        """
+        Compute f(x1, x2)
+        """
+        term1 = np.exp(x1 + 3*x2 - 0.1)
+        term2 = np.exp(x1 - 3*x2 - 0.1)
+        term3 = np.exp(-x1 - 0.1)
+        return float(term1 + term2 + term3)
 
-class CustomFunction(ObjectiveFunction):
+    def grad(self, x1, x2):
+        """
+        Gradient: [∂f/∂x1, ∂f/∂x2]
+        """
+        term1 = np.exp(x1 + 3*x2 - 0.1)
+        term2 = np.exp(x1 - 3*x2 - 0.1)
+        term3 = np.exp(-x1 - 0.1)
+
+        df_dx1 = term1 + term2 - term3
+        df_dx2 = 3*term1 - 3*term2
+        return np.array([df_dx1, df_dx2])
+
+    def hessian(self, x1, x2):
+        """
+        Hessian matrix:
+        [[∂²f/∂x1², ∂²f/∂x1∂x2],
+         [∂²f/∂x2∂x1, ∂²f/∂x2²]]
+        """
+        term1 = np.exp(x1 + 3*x2 - 0.1)
+        term2 = np.exp(x1 - 3*x2 - 0.1)
+        term3 = np.exp(-x1 - 0.1)
+
+        d2f_dx1x1 = term1 + term2 + term3
+        d2f_dx1x2 = 3*term1 - 3*term2
+        d2f_dx2x2 = 9*term1 + 9*term2
+
+        return np.array([[d2f_dx1x1, d2f_dx1x2],
+                         [d2f_dx1x2, d2f_dx2x2]])
+    
+
     """
     Template for implementing your own objective function.
     

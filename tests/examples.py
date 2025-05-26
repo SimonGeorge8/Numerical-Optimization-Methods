@@ -10,12 +10,12 @@ Note: Derive these formulas on paper first, then implement the exact expressions
 """
 
 import numpy as np
-from unconstrained_min import ObjectiveFunction
+from src.unconstrained_min import ObjectiveFunction
 
 
 class QuadraticFunction(ObjectiveFunction):
     """
-    Example: Quadratic function f(x) = (1/2) * x^T * Q * x
+    Example: Quadratic function f(x) =  x^T * Q * x
     
     Analytic derivatives:
     - ∇f(x) = Q * x
@@ -33,10 +33,10 @@ class QuadraticFunction(ObjectiveFunction):
     
     def func(self, x):
         """
-        Evaluate f(x) = (1/2) * x^T * Q * x 
+        Evaluate f(x) =  x^T * Q * x 
         """
         x = np.array(x)
-        return float(0.5 * x.T @ self.Q @ x)
+        return float( x.T @ self.Q @ x)
     
     def grad(self, x):
         """

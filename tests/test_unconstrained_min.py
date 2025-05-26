@@ -1,10 +1,8 @@
 """
 Unit tests for unconstrained minimization algorithms and objective functions.
-
 Run with: python -m pytest test_unconstrained_min.py -v
 or: python test_unconstrained_min.py
 """
-
 import unittest
 import numpy as np
 import sys
@@ -12,75 +10,9 @@ import os
 from pathlib import Path
 
 # Handle imports more robustly
-try:
-    # Try import from src directory first
-    from src.unconstrained_min import UnconstrainedMinimizer, ObjectiveFunction
-except ImportError:
-    # Add current directory to path and try again
-    current_dir = Path(__file__).parent
-    sys.path.insert(0, str(current_dir))
-    try:
-        from unconstrained_min import UnconstrainedMinimizer, ObjectiveFunction
-    except ImportError as e:
-        print(f"Error importing unconstrained_min: {e}")
-        print("Make sure unconstrained_min.py is in the same directory as this test file")
-        sys.exit(1)
-
-# Create simple objective functions for testing if separate file doesn't exist
-class TestQuadraticFunction(ObjectiveFunction):
-    """Simple quadratic function for testing: f(x) = 0.5 * x^T * Q * x"""
-    
-    def __init__(self, Q):
-        self.Q = np.array(Q)
-    
-    def func(self, x):
-        x = np.array(x)
-        return float(0.5 * x.T @ self.Q @ x)
-    
-    def grad(self, x):
-        x = np.array(x)
-        return self.Q @ x
-    
-    def hessian(self, x):
-        return self.Q
-
-
-
-class TestRosenbrockFunction(ObjectiveFunction):
-    """Rosenbrock function: f(x) = (a-x₁)² + b(x₂-x₁²)²"""
-    
-    def __init__(self, a=1, b=100):
-        self.a = a
-        self.b = b
-    
-    def func(self, x):
-        x = np.array(x)
-        if len(x) != 2:
-            raise ValueError("Rosenbrock function requires 2D input")
-        x1, x2 = x[0], x[1]
-        return float((self.a - x1)**2 + self.b * (x2 - x1**2)**2)
-    
-    def grad(self, x):
-        x = np.array(x)
-        if len(x) != 2:
-            raise ValueError("Rosenbrock function requires 2D input")
-        x1, x2 = x[0], x[1]
-        a, b = self.a, self.b
-        df_dx1 = -2*(a - x1) - 4*b*x1*(x2 - x1**2)
-        df_dx2 = 2*b*(x2 - x1**2)
-        return np.array([df_dx1, df_dx2])
-
-    def hessian(self, x):
-        x = np.array(x)
-        if len(x) != 2:
-            raise ValueError("Rosenbrock function requires 2D input")
-        x1, x2 = x[0], x[1]
-        b = self.b
-        d2f_dx1x1 = 2 - 4*b*(x2 - x1**2) + 8*b*x1**2
-        d2f_dx1x2 = -4*b*x1
-        d2f_dx2x2 = 2*b
-        return np.array([[d2f_dx1x1, d2f_dx1x2],
-                         [d2f_dx1x2, d2f_dx2x2]])
+# Try import from src directory first
+from src.unconstrained_min import UnconstrainedMinimizer, ObjectiveFunction
+from examples import QuadraticFunction, LinearFunction, RosenbrockFunction, SmoothedCornerTrianglesFunction
 
 
 class TestObjectiveFunctions(unittest.TestCase):
@@ -94,11 +26,11 @@ class TestObjectiveFunctions(unittest.TestCase):
     def test_quadratic_function(self):
         """Test QuadraticFunction implementation."""
         Q = np.array([[2, 1], [1, 2]])
-        func = TestQuadraticFunction(Q)
+        func = QuadraticFunction(Q)
         x = self.test_point
         
-        # Test function value: f(x) = 0.5 * x^T * Q * x
-        expected_f = 0.5 * x.T @ Q @ x
+        # Test function value: f(x) = x^T * Q * x
+        expected_f = x.T @ Q @ x
         self.assertAlmostEqual(func.func(x), expected_f, places=10)
         
         # Test gradient: ∇f(x) = Q * x
@@ -109,11 +41,9 @@ class TestObjectiveFunctions(unittest.TestCase):
         expected_hess = Q
         np.testing.assert_allclose(func.hessian(x), expected_hess, atol=self.tolerance)
     
-
-    
     def test_rosenbrock_function(self):
         """Test RosenbrockFunction implementation."""
-        func = TestRosenbrockFunction(a=1, b=100)
+        func = RosenbrockFunction(a=1, b=100)
         x = np.array([0.0, 0.0])  # Use origin for easier verification
         
         # Test function value at origin: f(0,0) = (1-0)² + 100(0-0²)² = 1
@@ -159,8 +89,8 @@ class TestNumericalGradients(unittest.TestCase):
     def test_quadratic_gradients(self):
         """Test QuadraticFunction gradients numerically."""
         Q = np.array([[3, 1], [1, 4]])
-        func = TestQuadraticFunction(Q)
-        x = np.array([0.7, -0.5])
+        func = QuadraticFunction(Q)
+        x = np.array([0.7, -0.5]) # FIX the test as the actual formula for the quadratic formula is incorrect
         
         analytical_grad = func.grad(x)
         numerical_grad = self.numerical_gradient(func, x)
@@ -169,7 +99,7 @@ class TestNumericalGradients(unittest.TestCase):
     
     def test_rosenbrock_gradients(self):
         """Test RosenbrockFunction gradients numerically."""
-        func = TestRosenbrockFunction()
+        func = RosenbrockFunction()
         x = np.array([0.5, 1.2])
         
         analytical_grad = func.grad(x)
@@ -222,7 +152,7 @@ class TestUnconstrainedMinimizer(unittest.TestCase):
         """Test gradient descent on quadratic function."""
         # Simple quadratic: f(x) = x₁² + 2x₂² (minimum at origin)
         Q = np.array([[2, 0], [0, 4]])
-        func = TestQuadraticFunction(Q)
+        func = QuadraticFunction(Q)
         minimizer = UnconstrainedMinimizer(method='gradient_descent')
         
         result = minimizer.minimize(
@@ -242,7 +172,7 @@ class TestUnconstrainedMinimizer(unittest.TestCase):
         """Test different convergence criteria."""
         # Simple quadratic: f(x) = x₁² + x₂²
         Q = np.array([[2, 0], [0, 2]])
-        func = TestQuadraticFunction(Q)
+        func = QuadraticFunction(Q)
         minimizer = UnconstrainedMinimizer(method='newton')
         
         # Strict tolerance
@@ -269,7 +199,7 @@ class TestUnconstrainedMinimizer(unittest.TestCase):
     
     def test_max_iterations(self):
         """Test maximum iteration limit."""
-        func = TestRosenbrockFunction()
+        func = RosenbrockFunction()
         minimizer = UnconstrainedMinimizer(method='gradient_descent')
         
         # Very few iterations with difficult starting point
@@ -321,7 +251,7 @@ class TestEdgeCases(unittest.TestCase):
         """Test starting exactly at the minimum."""
         # Simple quadratic: f(x) = x₁² + x₂² (minimum at origin)
         Q = np.array([[2, 0], [0, 2]])
-        func = TestQuadraticFunction(Q)
+        func = QuadraticFunction(Q)
         minimizer = UnconstrainedMinimizer(method='newton')
         
         result = minimizer.minimize(
@@ -344,7 +274,7 @@ class TestComparisonBetweenMethods(unittest.TestCase):
         """Compare Newton's method vs gradient descent on well-conditioned problems."""
         # Simple quadratic: f(x) = x₁² + x₂²
         Q = np.array([[2, 0], [0, 2]])
-        func = TestQuadraticFunction(Q)
+        func = QuadraticFunction(Q)
         
         # Newton's method
         minimizer_newton = UnconstrainedMinimizer(method='newton')

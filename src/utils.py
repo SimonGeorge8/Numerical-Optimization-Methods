@@ -1,7 +1,6 @@
 """
 Utility functions for numerical optimization visualization and analysis.
 """
-
 import matplotlib.pyplot as plt
 import numpy as np
 

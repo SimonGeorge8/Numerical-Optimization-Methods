@@ -3,6 +3,9 @@ import numpy as np
 class UnconstrainedMinimizer:
     """
     A class for unconstrained optimization using gradient descent or Newton methods.
+    
+    Works with objective functions that follow the assignment interface:
+    func(x, hessian_needed) -> (f, g, h)
     """
     
     def __init__(self, method='gradient_descent'):
@@ -15,6 +18,8 @@ class UnconstrainedMinimizer:
             The optimization method to use ('gradient_descent' or 'newton')
         """
         self.method = method
+        self.path = []
+        self.f_values = []
     
     def minimize(self, f, x0, obj_tol, param_tol, max_iter):
         """
@@ -22,11 +27,8 @@ class UnconstrainedMinimizer:
         
         Parameters:
         -----------
-        f : object
-            The objective function object with methods:
-            - f.func(x): evaluate function at x
-            - f.grad(x): evaluate gradient at x  
-            - f.hessian(x): evaluate Hessian matrix at x
+        f : callable
+            The objective function with interface: f(x, hessian_needed) -> (f_val, grad, hess)
         x0 : array-like
             Starting point for optimization
         obj_tol : float
@@ -42,60 +44,66 @@ class UnconstrainedMinimizer:
             Dictionary containing optimization results
         """
         x_curr = np.array(x0, dtype=float)
-        x_prev = x_curr.copy()
-        f_curr = f.func(x_curr)
-        f_prev = f_curr
+        
+        # Evaluate function at starting point
+        f_curr, _, _ = f(x_curr, hessian_needed=False)
+        
+        # Initialize storage for path and values
+        self.path = [x_curr.copy()]
+        self.f_values = [f_curr]
         
         iterations = 0
         converged = False
         
+        # Print initial iteration
+        print(f"Iteration {iterations}: x = {x_curr}, f(x) = {f_curr:.8f}")
+        
         while iterations < max_iter and not converged:
-            # Store previous values
             x_prev = x_curr.copy()
             f_prev = f_curr
             
             # Update step based on selected method
             if self.method == 'gradient_descent':
-                # Use line search to find optimal step size
-                direction = -f.grad(x_curr)
-                step_size = self._line_search(f, x_curr, direction)
+                # Get gradient for direction
+                _, gradient, _ = f(x_curr, hessian_needed=False)
+                direction = -gradient
+                # Use Wolfe line search with specified constants
+                step_size = self._wolfe_line_search(f, x_curr, direction, c1=0.01, backtrack_factor=0.5)
                 x_curr = x_curr + step_size * direction
             elif self.method == 'newton':
                 x_curr = self._newton_step(f, x_curr)
+            else:
+                raise ValueError(f"Unknown method: {self.method}")
             
             # Evaluate function at new point
-            f_curr = f.func(x_curr)
+            f_curr, _, _ = f(x_curr, hessian_needed=False)
+            iterations += 1
+            
+            # Store path and values
+            self.path.append(x_curr.copy())
+            self.f_values.append(f_curr)
+            
+            # Print iteration info
+            print(f"Iteration {iterations}: x = {x_curr}, f(x) = {f_curr:.8f}")
             
             # Check convergence
             converged = self._check_convergence(f_curr, f_prev, x_curr, x_prev, obj_tol, param_tol)
-            iterations += 1
+        
+        success_flag = converged
+        if not converged:
+            print(f"Maximum iterations ({max_iter}) reached without convergence")
+        else:
+            print("Converged successfully!")
         
         return {
             'x': x_curr,
             'f': f_curr,
             'iterations': iterations,
-            'converged': converged
+            'converged': success_flag,
+            'path': np.array(self.path),
+            'f_values': self.f_values,
+            'method': self.method
         }
-    
-    def _gradient_descent_step(self, f, x, step_size):
-        """
-        Perform a single gradient descent step.
-        
-        Parameters:
-        -----------
-        f : object
-            The objective function object with analytic derivatives
-        x : array-like
-            Current point
-        step_size : float
-            Step size for the update
-            
-        Returns:
-        --------
-        x_new : array-like
-            Updated point
-        """
-        return x - step_size * f.grad(x)
     
     def _newton_step(self, f, x):
         """
@@ -103,8 +111,8 @@ class UnconstrainedMinimizer:
         
         Parameters:
         -----------
-        f : object
-            The objective function object with analytic derivatives
+        f : callable
+            The objective function with interface: f(x, hessian_needed) -> (f_val, grad, hess)
         x : array-like
             Current point
             
@@ -114,25 +122,30 @@ class UnconstrainedMinimizer:
             Updated point
         """
         try:
-            # Solve H * p = -g for the Newton direction p
-            hessian = f.hessian(x)
-            gradient = f.grad(x)
+            # Get both gradient and Hessian
+            _, gradient, hessian = f(x, hessian_needed=True)
             
             # Check if Hessian is positive definite by trying Cholesky decomposition
             try:
                 np.linalg.cholesky(hessian)
                 # If successful, solve the linear system
                 newton_direction = np.linalg.solve(hessian, -gradient)
+                return x + newton_direction
             except np.linalg.LinAlgError:
-                # If Hessian is not positive definite, use gradient descent direction
-                newton_direction = -gradient
+                # If Hessian is not positive definite, use modified Newton
+                # Add small diagonal regularization
+                regularized_hessian = hessian + 1e-6 * np.eye(len(hessian))
+                try:
+                    newton_direction = np.linalg.solve(regularized_hessian, -gradient)
+                    return x + newton_direction
+                except np.linalg.LinAlgError:
+                    # Fallback to gradient descent step
+                    return x - 0.01 * gradient
                 
-            return x + newton_direction
-            
         except np.linalg.LinAlgError:
-            # If Hessian is singular, fallback to gradient descent
-            return x - 0.01 * f.grad(x)
-    
+            # If Hessian computation fails, fallback to gradient descent
+            _, gradient, _ = f(x, hessian_needed=False)
+            return x - 0.01 * gradient
     
     def _check_convergence(self, f_curr, f_prev, x_curr, x_prev, obj_tol, param_tol):
         """
@@ -158,89 +171,72 @@ class UnconstrainedMinimizer:
         converged : bool
             True if converged, False otherwise
         """
-        # Check relative change in objective function
-        obj_change = abs(f_curr - f_prev) / max(abs(f_prev), 1)
+        # Check absolute change in objective function
+        obj_change = abs(f_curr - f_prev)
         
-        # Check relative change in parameters
-        param_change = np.linalg.norm(x_curr - x_prev) / max(np.linalg.norm(x_prev), 1)
+        # Check Euclidean distance between parameters
+        param_change = np.linalg.norm(x_curr - x_prev)
         
-        # Return True if both conditions are met
-        return obj_change < obj_tol and param_change < param_tol
+        # Check if both criteria are met
+        obj_converged = obj_change < obj_tol
+        param_converged = param_change < param_tol
+        
+        return obj_converged or param_converged
     
-    
-    def _line_search(self, f, x, direction, alpha_init=1.0, c1=1e-4, c2=0.9, max_iter=50):
+    def _wolfe_line_search(self, f, x, direction, c1=0.01, backtrack_factor=0.5, max_iter=50):
         """
-        Perform line search to find optimal step size using Wolfe conditions.
+        Perform backtracking line search with Armijo condition (first Wolfe condition).
         
         Parameters:
         -----------
-        f : object
-            The objective function object with analytic derivatives
+        f : callable
+            The objective function with interface: f(x, hessian_needed) -> (f_val, grad, hess)
         x : array-like
             Current point
         direction : array-like
             Search direction
-        alpha_init : float
-            Initial step size
         c1 : float
-            Parameter for Armijo condition
-        c2 : float
-            Parameter for curvature condition
+            Parameter for Armijo condition (should be 0.01 per assignment)
+        backtrack_factor : float
+            Backtracking factor (should be 0.5 per assignment)
         max_iter : int
             Maximum iterations for line search
             
         Returns:
         --------
         step_size : float
-            Optimal step size
+            Step size satisfying Armijo condition
         """
-        alpha = alpha_init
-        f0 = f.func(x)
-        grad0 = np.dot(f.grad(x), direction)
+        alpha = 1.0
+        f0, grad0, _ = f(x, hessian_needed=False)
+        directional_derivative = np.dot(grad0, direction)
         
         # If direction is not a descent direction, return small step
-        if grad0 >= 0:
-            return 0.01
-        
-        alpha_low = 0.0
-        alpha_high = None
+        if directional_derivative >= 0:
+            return 1e-4
         
         for i in range(max_iter):
             x_new = x + alpha * direction
-            f_new = f.func(x_new)
+            f_new, _, _ = f(x_new, hessian_needed=False)
             
             # Armijo condition (sufficient decrease)
-            if f_new > f0 + c1 * alpha * grad0:
-                alpha_high = alpha
-                alpha = (alpha_low + alpha_high) / 2.0
-            else:
-                grad_new = np.dot(f.grad(x_new), direction)
-                
-                # Curvature condition
-                if abs(grad_new) <= c2 * abs(grad0):
-                    return alpha
-                
-                if grad_new >= 0:
-                    alpha_high = alpha_low
-                    alpha_low = alpha
-                else:
-                    alpha_low = alpha
-                
-                if alpha_high is not None:
-                    alpha = (alpha_low + alpha_high) / 2.0
-                else:
-                    alpha *= 2.0
+            if f_new <= f0 + c1 * alpha * directional_derivative:
+                return alpha
+            
+            # Backtrack
+            alpha *= backtrack_factor
         
         # If line search fails, return a conservative step size
-        return 0.01
+        return 1e-4
 
 
+# Wrapper class for backward compatibility with old interface
 class ObjectiveFunction:
     """
     Base class template for objective functions with analytic derivatives.
     
-    Each objective function should inherit from this class and implement
-    the exact analytic formulas for f, gradient, and Hessian.
+    This is kept for backward compatibility, but the assignment requires
+    functions with interface: func(x, hessian_needed) -> (f, g, h)
     """
     
     def func(self, x):
@@ -290,3 +286,26 @@ class ObjectiveFunction:
             Hessian matrix ∇²f(x)
         """
         raise NotImplementedError("Must implement analytic Hessian formula")
+
+
+def create_function_wrapper(objective_function_class):
+    """
+    Convert an ObjectiveFunction class to the required function interface.
+    
+    Parameters:
+    -----------
+    objective_function_class : ObjectiveFunction
+        Instance of ObjectiveFunction class
+        
+    Returns:
+    --------
+    func : callable
+        Function with interface: func(x, hessian_needed) -> (f, g, h)
+    """
+    def wrapper(x, hessian_needed=False):
+        f_val = objective_function_class.func(x)
+        grad = objective_function_class.grad(x)
+        hess = objective_function_class.hessian(x) if hessian_needed else None
+        return f_val, grad, hess
+    
+    return wrapper
